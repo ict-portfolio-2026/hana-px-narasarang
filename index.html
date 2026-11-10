@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HANA뿐인 PX | 나라사랑카드 맞춤 혜택 테스트</title>
+  <link rel="stylesheet" href="./style.css?v=20260720-3" />
+</head>
+<body>
+  <main class="wrapper">
+    <header class="site-topbar">
+      <div class="logo-wrap smart20-wrap">
+        <strong class="brand-text">HANA뿐인 PX</strong>
+      </div>
+      <span class="topbar-chip">PX BENEFIT MISSION</span>
+    </header>
+
+    <section class="hero">
+      <div class="hero-content">
+        <span class="badge">🪖 나라사랑카드 혜택 보급소</span>
+        <h1>HANA뿐인 PX</h1>
+        <h2 class="hero-lead">나에게 맞는 나라사랑카드 혜택 알아보자!</h2>
+        <p class="hero-subtext">간단한 질문을 통해 내 군생활 소비패턴에 맞는 하나은행 나라사랑카드 혜택을 알려드립니다.</p>
+        <div class="hero-meta">
+          <span>소요시간 약 1분</span>
+          <span>QR 참여 가능</span>
+        </div>
+      </div>
+      <div class="hero-card">
+        <small>MISSION CARD</small>
+        <strong>나에게 맞는 혜택 찾기</strong>
+      </div>
+      <div class="hero-visual" aria-hidden="true"><span class="hero-emoji">🪖</span></div>
+    </section>
+
+    <section id="start" class="panel start-grid">
+      <div>
+        <div class="ration-title">
+          <strong>오늘의 보급 미션</strong>
+          <span class="tag">약 1분</span>
+        </div>
+        <h2>내 군 생활 소비패턴에 맞는 혜택을 찾아보세요.</h2>
+        <p class="notice">10개의 간단한 질문에 답하면 나에게 맞는 나라사랑카드 혜택과 소비 유형을 바로 확인할 수 있습니다.</p>
+        <button id="startBtn" class="btn">테스트 시작하기</button>
+      </div>
+      <div class="mini-card with-character">
+        <div class="ration-title">
+          <strong>PX 메뉴판</strong>
+          <span class="tag">HANA</span>
+        </div>
+        <p>PX · 교통 · 배달/외식 · 온라인 쇼핑 · 문화생활 · 자산관리 중 나의 소비 성향을 분석해, 가장 잘 맞는 혜택 유형과 추천 혜택 4가지를 알려드립니다.</p>
+      </div>
+    </section>
+
+    <section id="quiz" class="panel hidden">
+      <div class="q-meta">
+        <span id="qCount">Q1 / 10</span>
+        <span>혜택 추천 진행 중</span>
+      </div>
+      <div class="progress-wrap"><div id="progress" class="progress-bar"></div></div>
+      <h2 id="question" class="question-title"></h2>
+      <div id="choices" class="choices"></div>
+    </section>
+
+    <section id="result" class="panel hidden"></section>
+  </main>
+
+  <script src="./config.js"></script>
+  <script src="./data.js?v=20260720-3"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = { index: 0, answers: [], scores: {}, benefitScores: {}, resultRef: null };
+
+    let supabaseClient = null;
+
+    function initSupabaseClient() {
+      const cfg = window.HANA_PX_CONFIG || {};
+      if (!cfg.supabaseUrl || !cfg.supabaseAnonKey || !window.supabase) return;
+      try {
+        supabaseClient = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+      } catch (error) {
+        console.warn("Supabase 초기화 실패. 설문은 로컬 모드로 계속 작동합니다.", error);
+        supabaseClient = null;
+      }
+    }
+
+    function loadSupabaseInBackground() {
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+      script.async = true;
+      script.onload = initSupabaseClient;
+      script.onerror = () => console.warn("Supabase CDN 로드 실패. 설문은 로컬 모드로 계속 작동합니다.");
+      document.head.appendChild(script);
+    }
+
+    function resetScores() {
+      Object.keys(HANA_PX_DATA.categories).forEach(key => state.scores[key] = 0);
+      Object.keys(HANA_PX_DATA.benefits).forEach(key => state.benefitScores[key] = 0);
+    }
+
+    function startQuiz() {
+      state.index = 0;
+      state.answers = [];
+      resetScores();
+      $("start").classList.add("hidden");
+      $("result").classList.add("hidden");
+      $("quiz").classList.remove("hidden");
+      renderQuestion();
+    }
+
+    function renderQuestion() {
+      const total = HANA_PX_DATA.questions.length;
+      const q = HANA_PX_DATA.questions[state.index];
+      $("qCount").textContent = `Q${state.index + 1} / ${total}`;
+      $("progress").style.width = `${(state.index / total) * 100}%`;
+      $("question").textContent = q.text;
+      $("choices").innerHTML = "";
+      q.choices.forEach((choice, idx) => {
+        const btn = document.createElement("button");
+        btn.className = "choice";
+        btn.textContent = choice.text;
+        btn.addEventListener("click", () => selectChoice(idx));
+        $("choices").appendChild(btn);
+      });
+    }
+
+    function selectChoice(choiceIndex) {
+      const q = HANA_PX_DATA.questions[state.index];
+      const choice = q.choices[choiceIndex];
+      state.answers.push({ questionId: q.id, question: q.text, choice: choice.text });
+      Object.entries(choice.scores || {}).forEach(([key, value]) => {
+        state.scores[key] = (state.scores[key] || 0) + value;
+      });
+      (choice.benefits || []).forEach(key => {
+        state.benefitScores[key] = (state.benefitScores[key] || 0) + 1;
+      });
+      state.index += 1;
+      if (state.index >= HANA_PX_DATA.questions.length) finishQuiz();
+      else renderQuestion();
+    }
+
+    function calculateResult() {
+      const categoryKey = Object.entries(state.scores).sort((a, b) => b[1] - a[1])[0][0];
+      const configuredBenefits = HANA_PX_DATA.categories[categoryKey].resultBenefits || [];
+      const topBenefits = configuredBenefits.length
+        ? configuredBenefits.slice(0, 4)
+        : Object.entries(state.benefitScores)
+            .sort((a, b) => b[1] - a[1])
+            .filter(([, score]) => score > 0)
+            .slice(0, 4)
+            .map(([key]) => key);
+      while (topBenefits.length < 4) {
+        const fallback = Object.keys(HANA_PX_DATA.benefits).find(key => !topBenefits.includes(key));
+        if (!fallback) break;
+        topBenefits.push(fallback);
+      }
+      return {
+        campaign_id: HANA_PX_DATA.campaignId,
+        result_type: HANA_PX_DATA.categories[categoryKey].name,
+        result_category: categoryKey,
+        top_benefit_ids: topBenefits,
+        scores: state.scores,
+        benefit_scores: state.benefitScores,
+        answers: state.answers,
+        created_at: new Date().toISOString()
+      };
+    }
+
+    async function finishQuiz() {
+      $("progress").style.width = "100%";
+      const result = calculateResult();
+      await saveResult(result);
+      renderResult(result);
+      $("quiz").classList.add("hidden");
+      $("result").classList.remove("hidden");
+    }
+
+    async function saveResult(result) {
+      const cfg = window.HANA_PX_CONFIG || {};
+      const localKey = "hana_px_results";
+      const localResults = JSON.parse(localStorage.getItem(localKey) || "[]");
+      result.oneq_clicked = false;
+      localResults.push(result);
+      localStorage.setItem(localKey, JSON.stringify(localResults));
+
+      // 참여자는 결과를 '쓰기'만 할 수 있고 읽을 수 없다(RLS). 그래서 행 id를 돌려받는 대신
+      // 브라우저에서 만든 무작위 참조값(client_ref)으로 이후 앱 전환 클릭을 기록한다.
+      state.resultRef = null;
+      if (!supabaseClient) return;
+      const ref = (crypto.randomUUID && crypto.randomUUID()) || null;
+      try {
+        const { error } = await supabaseClient.from(cfg.tableName).insert({
+          client_ref: ref,
+          campaign_id: result.campaign_id,
+          result_type: result.result_type,
+          result_category: result.result_category,
+          top_benefit_ids: result.top_benefit_ids,
+          scores: result.scores,
+          benefit_scores: result.benefit_scores,
+          answers: result.answers,
+          user_agent: navigator.userAgent
+        });
+        if (error) throw error;
+        state.resultRef = ref;
+      } catch (e) {
+        console.warn("Supabase 저장 실패. localStorage에는 저장됨.", e);
+      }
+    }
+
+
+    function getAppLinkSet() {
+      const cfg = window.HANA_PX_CONFIG || {};
+      const links = cfg.appLinks || {};
+      return {
+        officialOneQ: links.officialOneQ || "https://m.site.naver.com/2c2Wd",
+        android: links.android || "https://play.google.com/store/apps/details?id=com.hanabank.oqf&hl=ko",
+        ios: links.ios || "https://apps.apple.com/kr/app/id6743190232",
+        guide: links.guide || "https://www.kebhana.com/cont/smartapp/smartapp14/smartapp1401/index.jsp",
+        lounge: links.lounge || "https://m.kebhana.com/cont/app/app01/index.jsp"
+      };
+    }
+
+    async function recordOneQClick() {
+      // 로컬: 마지막 결과 행에 클릭 표시 (로컬 모드 대시보드 전환율용)
+      try {
+        const localKey = "hana_px_results";
+        const localResults = JSON.parse(localStorage.getItem(localKey) || "[]");
+        if (localResults.length) {
+          localResults[localResults.length - 1].oneq_clicked = true;
+          localStorage.setItem(localKey, JSON.stringify(localResults));
+        }
+      } catch (e) {}
+      // Supabase: 이 참여 행을 oneq_clicked = true 로 업데이트
+      const cfg = window.HANA_PX_CONFIG || {};
+      if (supabaseClient && state.resultRef) {
+        try {
+          // 직접 UPDATE 권한 없이, oneq_clicked 한 칸만 바꾸는 DB 함수를 호출
+          await supabaseClient.rpc("px_mark_oneq_clicked", { p_ref: state.resultRef });
+        } catch (e) {
+          console.warn("하나원큐 클릭 기록 실패", e);
+        }
+      }
+    }
+
+    function renderResult(result) {
+      const category = HANA_PX_DATA.categories[result.result_category];
+      const benefitHtml = result.top_benefit_ids.map(key => {
+        const benefit = HANA_PX_DATA.benefits[key];
+        return `
+          <article class="benefit">
+            <span class="tag">${benefit.tag}</span>
+            <h3>${benefit.title}</h3>
+            <p>${benefit.description}</p>
+          </article>
+        `;
+      }).join("");
+      const appLinks = getAppLinkSet();
+
+      $("result").innerHTML = `
+        <div class="result-top">
+          <div class="result-icon">${category.icon}</div>
+          <div>
+            <p class="tag">나의 나라사랑카드 혜택 유형</p>
+            <h2 class="result-name">${category.name}</h2>
+            <p>${category.description}</p>
+          </div>
+        </div>
+        <h3 class="section-title">추천 혜택 보급품</h3>
+        <div class="benefits">${benefitHtml}</div>
+        <section class="app-bridge">
+          <div class="app-bridge-head">
+            <span class="tag">MISSION COMPLETE</span>
+            <h3>이제 NEW 하나원큐 앱으로 바로 접속해보세요</h3>
+            <p>아래 버튼을 누르면 NEW 하나원큐 앱 연결 페이지로 이동합니다.</p>
+          </div>
+          <div class="app-cta-grid app-cta-grid-official">
+            <a class="btn app-main app-official" href="${appLinks.officialOneQ}" target="_blank" rel="noopener" onclick="recordOneQClick()">NEW 하나원큐 접속하기</a>
+            <a class="btn small secondary" href="${appLinks.ios}" target="_blank" rel="noopener">설치가 안 될 때(아이폰)</a>
+            <a class="btn small secondary" href="${appLinks.android}" target="_blank" rel="noopener">설치가 안 될 때(안드로이드)</a>
+            <a class="btn small outline app-guide" href="${appLinks.guide}" target="_blank" rel="noopener">앱 이용 등록 가이드</a>
+          </div>
+          <div class="app-steps">
+            <article><strong>01 NEW 하나원큐 접속</strong><span>QR코드를 통해 앱 실행 또는 안내 페이지로 이동</span></article>
+            <article><strong>02 앱 이용 확인</strong><span>설치 여부를 확인한 후 앱을 실행하거나 안내에 따라 설치를 진행</span></article>
+            <article><strong>03 혜택 확인</strong><span>나라사랑카드 및 NEW 하나원큐 관련 혜택과 서비스를 확인</span></article>
+          </div>
+        </section>
+        <div class="actions">
+          <button class="btn small" onclick="startQuiz()">다시 테스트하기</button>
+        </div>
+        <p class="notice">실제 카드 혜택은 발급 조건, 전월 실적, 이용처 및 적용 기간에 따라 달라질 수 있으니, 자세한 내용은 하나카드 공식 홈페이지를 통해 확인해 주세요.</p>
+      `;
+    }
+
+    $("startBtn").addEventListener("click", startQuiz);
+    resetScores();
+    loadSupabaseInBackground();
+  </script>
+</body>
+</html>

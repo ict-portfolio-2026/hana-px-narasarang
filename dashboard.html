@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HANA뿐인 PX | 결과 대시보드</title>
+  <link rel="stylesheet" href="./style.css?v=20260720-2" />
+  <style>
+    /* ---------- 대시보드 전용 스타일 (토큰은 style.css 재사용) ---------- */
+    .dash-topbar { flex-wrap: wrap; row-gap: 10px; }
+    .dash-topbar .title-group { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .dash-topbar .title-group img { height: 34px; width: auto; }
+    .dash-topbar h1 { color: #fff; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+    .dash-topbar .sub { color: rgba(255,255,255,.72); font-size: 12px; }
+
+    /* 로그인 게이트 */
+    .gate { display: grid; place-items: center; min-height: 60vh; }
+    .gate-card {
+      width: min(420px, 100%);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 30px 26px;
+      box-shadow: var(--shadow-md);
+      text-align: center;
+    }
+    .gate-card .lock { font-size: 34px; }
+    .gate-card h2 { margin-top: 10px; font-size: 20px; font-weight: 800; color: var(--teal-900); }
+    .gate-card p { margin-top: 8px; font-size: 13.5px; color: var(--muted); }
+    .gate-field { margin-top: 20px; display: grid; gap: 10px; }
+    .gate-field input {
+      width: 100%;
+      font-size: 16px;
+      padding: 14px 16px;
+      border: 1.5px solid var(--line);
+      border-radius: 12px;
+      background: var(--card-2);
+      color: var(--ink);
+    }
+    .gate-field input:focus { outline: none; border-color: var(--teal-400); background: #fff; }
+    .gate-err { color: #c0392b; font-size: 13px; min-height: 18px; margin-top: 4px; }
+
+    /* 소스 표시 */
+    .source-pill {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 12px; font-weight: 700; letter-spacing: .02em;
+      padding: 7px 13px; border-radius: var(--radius-pill);
+    }
+    .source-pill.live { color: #0a6b3b; background: #e3f6ea; border: 1px solid #bde6cc; }
+    .source-pill.local { color: var(--olive-dark); background: var(--olive-050); border: 1px solid rgba(107,112,66,.25); }
+    .source-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+    .dash-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+    }
+    .updated { font-size: 12px; color: var(--muted); }
+
+    /* KPI */
+    .kpi-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+    .kpi {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 16px; padding: 18px; box-shadow: var(--shadow-sm);
+    }
+    .kpi .kpi-label { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+    .kpi .kpi-num { font-size: 30px; font-weight: 800; color: var(--teal-800); line-height: 1.1; margin-top: 6px; }
+    .kpi .kpi-num small { font-size: 14px; font-weight: 700; color: var(--muted); }
+    .kpi.accent { background: linear-gradient(150deg, var(--teal-050), #fff); border-color: var(--teal-100); }
+
+    /* 카드 헤더 */
+    .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
+    .card-head h3 { font-size: 16px; font-weight: 800; color: var(--teal-900); }
+    .card-head .count { font-size: 12.5px; color: var(--muted); }
+
+    /* 막대 그래프 */
+    .bars { display: grid; gap: 12px; }
+    .bar-row { display: grid; grid-template-columns: 128px 1fr auto; align-items: center; gap: 12px; }
+    .bar-label { font-size: 13.5px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 7px; }
+    .bar-label .ic { font-size: 15px; }
+    .bar-track { height: 14px; border-radius: var(--radius-pill); background: var(--teal-050); overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: var(--radius-pill); min-width: 3px; transition: width .5s cubic-bezier(.4,0,.2,1); }
+    .bar-val { font-size: 13px; font-weight: 800; color: var(--teal-800); white-space: nowrap; min-width: 58px; text-align: right; }
+    .bar-val small { color: var(--muted); font-weight: 700; }
+
+    /* 최근 내역 */
+    .recent { display: grid; gap: 8px; }
+    .recent-row {
+      display: grid; grid-template-columns: 150px 1fr; gap: 10px; align-items: start;
+      padding: 12px 0; border-bottom: 1px solid var(--line);
+    }
+    .recent-row:last-child { border-bottom: none; }
+    .recent-time { font-size: 12.5px; color: var(--muted); font-family: var(--mono); }
+    .recent-main .rtype { font-size: 14.5px; font-weight: 800; color: var(--teal-800); }
+    .recent-main .rben { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+
+    /* 빈 상태 */
+    .empty { text-align: center; padding: 20px 10px; }
+    .empty .empty-emoji { font-size: 56px; line-height: 1; margin: 0 auto 14px; }
+    .empty h3 { font-size: 18px; font-weight: 800; color: var(--teal-900); }
+    .empty p { color: var(--muted); font-size: 14px; margin-top: 8px; }
+
+    @media (min-width: 720px) {
+      .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+      .dash-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrapper">
+    <!-- 로그인 게이트 -->
+    <section id="gate" class="gate">
+      <div class="gate-card">
+        <div class="lock">🔐</div>
+        <h2>보급소 관제실</h2>
+        <p>HANA뿐인 PX 결과 대시보드입니다.<br>운영자 계정으로 로그인하세요.</p>
+        <div class="gate-field">
+          <input id="email" type="email" placeholder="운영자 이메일" autocomplete="username" />
+          <input id="pw" type="password" placeholder="비밀번호" autocomplete="current-password" />
+          <button id="loginBtn" class="btn">입장하기</button>
+        </div>
+        <div id="gateErr" class="gate-err"></div>
+      </div>
+    </section>
+
+    <!-- 대시보드 본문 -->
+    <div id="dash" class="hidden" style="display:flex; flex-direction:column; gap:18px;">
+      <header class="site-topbar dash-topbar">
+        <div class="title-group">
+          <div>
+            <h1>HANA뿐인 PX · 결과 대시보드</h1>
+            <span class="sub" id="campaignLabel"></span>
+          </div>
+        </div>
+        <span class="topbar-chip">PX CONTROL</span>
+      </header>
+
+      <div class="dash-toolbar">
+        <span id="sourcePill" class="source-pill local"><span class="dot"></span>불러오는 중…</span>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span class="updated" id="updated"></span>
+          <button id="refreshBtn" class="btn small secondary">새로고침</button>
+          <button id="logoutBtn" class="btn small secondary">로그아웃</button>
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <section class="kpi-grid">
+        <div class="kpi accent">
+          <div class="kpi-label">총 참여자</div>
+          <div class="kpi-num" id="kpiTotal">0<small> 명</small></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">오늘 참여</div>
+          <div class="kpi-num" id="kpiToday">0<small> 명</small></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">최다 혜택 유형</div>
+          <div class="kpi-num" id="kpiTopType" style="font-size:20px;">-</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">하나원큐 전환</div>
+          <div class="kpi-num" id="kpiClicks">0<small> 명</small></div>
+        </div>
+      </section>
+
+      <!-- 빈 상태 -->
+      <section id="emptyState" class="panel hidden">
+        <div class="empty">
+          <div class="empty-emoji" aria-hidden="true">📭</div>
+          <h3>아직 집계된 참여 결과가 없습니다</h3>
+          <p>부스에서 테스트가 진행되면 이 화면에 실시간으로 통계가 쌓입니다.<br>
+             Supabase를 연결하지 않은 경우, 이 브라우저에서 진행한 결과만 표시됩니다.</p>
+        </div>
+      </section>
+
+      <!-- 그래프 2단 -->
+      <div id="charts" class="dash-cols hidden">
+        <section class="panel">
+          <div class="card-head">
+            <h3>혜택 유형 분포</h3>
+            <span class="count" id="typeCount"></span>
+          </div>
+          <div class="bars" id="typeBars"></div>
+        </section>
+
+        <section class="panel">
+          <div class="card-head">
+            <h3>추천 혜택 TOP</h3>
+            <span class="count">보급품 추천 누적</span>
+          </div>
+          <div class="bars" id="benefitBars"></div>
+        </section>
+      </div>
+
+      <!-- 최근 참여 -->
+      <section id="recentCard" class="panel hidden">
+        <div class="card-head">
+          <h3>최근 참여 내역</h3>
+          <span class="count" id="recentCount"></span>
+        </div>
+        <div class="recent" id="recentList"></div>
+      </section>
+
+      <p class="notice">
+        결과는 <b id="srcNote">-</b>에서 불러옵니다. Supabase 미연결 시에는 이 브라우저의 localStorage 데이터만
+        표시되며 기기 간 합산은 되지 않습니다. Supabase 연결 시 결과 조회는 px_admins에 등록된 운영자 계정만 가능합니다(RLS).
+      </p>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./config.js?v=20260720-4"></script>
+  <script src="./data.js?v=20260720-2"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const CFG = window.HANA_PX_CONFIG || (typeof HANA_PX_CONFIG !== "undefined" ? HANA_PX_CONFIG : {});
+    const DATA = window.HANA_PX_DATA || (typeof HANA_PX_DATA !== "undefined" ? HANA_PX_DATA : {});
+
+    const supabaseClient = (() => {
+      if (!CFG.supabaseUrl || !CFG.supabaseAnonKey || !window.supabase) return null;
+      try { return window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey); }
+      catch (e) { console.warn("Supabase 초기화 실패", e); return null; }
+    })();
+
+    /* ---------- 로그인 게이트 ---------- */
+    function unlock() {
+      $("gate").classList.add("hidden");
+      $("dash").classList.remove("hidden");
+      $("campaignLabel").textContent = DATA.campaignId ? `캠페인 · ${DATA.campaignId}` : "";
+      loadAndRender();
+    }
+    // 인증은 Supabase Auth가 서버에서 처리한다. 코드에는 비밀번호를 두지 않으며,
+    // 결과 조회 권한은 DB의 RLS(관리자 목록 px_admins)가 결정한다.
+    async function tryLogin() {
+      if (!supabaseClient) {           // Supabase 미설정: 이 브라우저 데이터만 보는 로컬 미리보기
+        unlock();
+        return;
+      }
+      const email = String($("email").value || "").trim();
+      const password = String($("pw").value || "");
+      if (!email || !password) { $("gateErr").textContent = "이메일과 비밀번호를 입력하세요."; return; }
+      $("loginBtn").disabled = true;
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      $("loginBtn").disabled = false;
+      if (error) {
+        $("gateErr").textContent = "로그인에 실패했습니다. 계정 정보를 확인하세요.";
+        $("pw").select();
+        return;
+      }
+      $("gateErr").textContent = "";
+      unlock();
+    }
+    async function logout() {
+      if (supabaseClient) await supabaseClient.auth.signOut();
+      location.reload();
+    }
+    $("loginBtn").addEventListener("click", tryLogin);
+    $("pw").addEventListener("keydown", (e) => { if (e.key === "Enter") tryLogin(); });
+    $("logoutBtn").addEventListener("click", logout);
+    (async () => {
+      if (supabaseClient) {
+        const { data } = await supabaseClient.auth.getSession();
+        if (data && data.session) { unlock(); return; }
+      }
+      $("email").focus();
+    })();
+
+    /* ---------- 데이터 로드 ---------- */
+    async function loadResults() {
+      if (supabaseClient) {
+        try {
+          const { data, error } = await supabaseClient
+            .from(CFG.tableName)
+            .select("*")
+            .eq("campaign_id", DATA.campaignId)
+            .order("created_at", { ascending: false });
+          if (!error && Array.isArray(data)) return { source: "supabase", rows: data };
+          console.warn("Supabase 조회 오류, 로컬로 대체", error);
+        } catch (e) { console.warn("Supabase 조회 예외, 로컬로 대체", e); }
+      }
+      const local = JSON.parse(localStorage.getItem("hana_px_results") || "[]")
+        .filter(r => !DATA.campaignId || r.campaign_id === DATA.campaignId)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      return { source: "local", rows: local };
+    }
+
+    function getClicks() {
+      return JSON.parse(localStorage.getItem("hana_px_oneq_clicks") || "[]").length;
+    }
+
+    /* ---------- 집계 ---------- */
+    function isToday(iso) {
+      const d = new Date(iso);
+      const n = new Date();
+      return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+    }
+    function fmtTime(iso) {
+      const d = new Date(iso);
+      if (isNaN(d)) return "-";
+      return d.toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    }
+
+    function renderBars(el, entries, max, colorFn, total) {
+      el.innerHTML = "";
+      if (!entries.length) { el.innerHTML = '<p class="notice" style="border:none;padding:0;margin:0;">데이터가 없습니다.</p>'; return; }
+      entries.forEach(([label, value, icon]) => {
+        const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+        const share = total > 0 ? Math.round((value / total) * 100) : 0;
+        const row = document.createElement("div");
+        row.className = "bar-row";
+        row.innerHTML = `
+          <div class="bar-label">${icon ? `<span class="ic">${icon}</span>` : ""}<span>${label}</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${colorFn(label)}"></div></div>
+          <div class="bar-val">${value}<small> · ${share}%</small></div>`;
+        el.appendChild(row);
+      });
+    }
+
+    function render(state) {
+      const { source, rows } = state;
+      const total = rows.length;
+
+      // 소스 표시
+      const pill = $("sourcePill");
+      if (source === "supabase") {
+        pill.className = "source-pill live";
+        pill.innerHTML = '<span class="dot"></span>Supabase 실시간 연결';
+        $("srcNote").textContent = "Supabase (실시간)";
+      } else {
+        pill.className = "source-pill local";
+        pill.innerHTML = '<span class="dot"></span>이 브라우저 로컬 저장';
+        $("srcNote").textContent = "이 브라우저 localStorage";
+      }
+      $("updated").textContent = "업데이트 " + new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+      // KPI
+      $("kpiTotal").innerHTML = `${total}<small> 명</small>`;
+      $("kpiToday").innerHTML = `${rows.filter(r => isToday(r.created_at)).length}<small> 명</small>`;
+      const oneqClicked = rows.filter(r => r.oneq_clicked).length;
+      const oneqRate = total ? Math.round(oneqClicked / total * 100) : 0;
+      $("kpiClicks").innerHTML = `${oneqClicked}<small> 명 · ${oneqRate}%</small>`;
+
+      // 유형 분포 (모든 카테고리 기준)
+      const cats = DATA.categories || {};
+      const catCount = {};
+      Object.keys(cats).forEach(k => catCount[k] = 0);
+      rows.forEach(r => { if (r.result_category != null) catCount[r.result_category] = (catCount[r.result_category] || 0) + 1; });
+      const catEntries = Object.entries(catCount)
+        .map(([k, v]) => [cats[k] ? cats[k].name : k, v, cats[k] ? cats[k].icon : "", k])
+        .filter(e => e[1] > 0)
+        .sort((a, b) => b[1] - a[1]);
+      const catMax = Math.max(1, ...catEntries.map(e => e[1]));
+      const catColorByName = {};
+      Object.values(cats).forEach(c => catColorByName[c.name] = c.color);
+      $("kpiTopType").textContent = catEntries.length ? catEntries[0][0] : "-";
+      $("typeCount").textContent = `${catEntries.length}개 유형`;
+      renderBars($("typeBars"), catEntries.map(e => [e[0], e[1], e[2]]), catMax,
+        (name) => catColorByName[name] || "var(--teal-600)", total);
+
+      // 추천 혜택 TOP
+      const bens = DATA.benefits || {};
+      const benCount = {};
+      rows.forEach(r => (r.top_benefit_ids || []).forEach(id => { benCount[id] = (benCount[id] || 0) + 1; }));
+      const benEntries = Object.entries(benCount)
+        .map(([id, v]) => [bens[id] ? bens[id].title : id, v])
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10);
+      const benMax = Math.max(1, ...benEntries.map(e => e[1]));
+      renderBars($("benefitBars"), benEntries, benMax, () => "var(--teal-600)", total);
+
+      // 최근 내역
+      const recentEl = $("recentList");
+      recentEl.innerHTML = "";
+      rows.slice(0, 25).forEach(r => {
+        const benTitles = (r.top_benefit_ids || []).slice(0, 3)
+          .map(id => bens[id] ? bens[id].title : id).join(" · ");
+        const row = document.createElement("div");
+        row.className = "recent-row";
+        row.innerHTML = `
+          <div class="recent-time">${fmtTime(r.created_at)}</div>
+          <div class="recent-main">
+            <div class="rtype">${r.result_type || "-"}</div>
+            <div class="rben">${benTitles || "-"}</div>
+          </div>`;
+        recentEl.appendChild(row);
+      });
+      $("recentCount").textContent = `최근 ${Math.min(rows.length, 25)}건`;
+
+      // 표시 토글
+      const hasData = total > 0;
+      $("emptyState").classList.toggle("hidden", hasData);
+      $("charts").classList.toggle("hidden", !hasData);
+      $("recentCard").classList.toggle("hidden", !hasData);
+    }
+
+    async function loadAndRender() {
+      const btn = $("refreshBtn");
+      btn.disabled = true; const prev = btn.textContent; btn.textContent = "불러오는 중…";
+      try {
+        const state = await loadResults();
+        render(state);
+      } finally {
+        btn.disabled = false; btn.textContent = prev;
+      }
+    }
+    $("refreshBtn").addEventListener("click", loadAndRender);
+  </script>
+</body>
+</html>
